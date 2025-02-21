@@ -1,0 +1,8 @@
+After training the SkipGram model, we can observe how words are grouped according to their context and meaning. For example, 
+semantically related words, such as "king" and "queen" or "dog" and "cat", tend to be close to each other, indicating that 
+the model has correctly learned their relationships. In addition, a clear distinction between nouns and adjectives can be 
+noted, where nouns such as "car" or "house" form a separate group from adjectives such as "big" or "fast". Functional words 
+such as "the" or "and" are grouped separately, reflecting their common grammatical function. Overall, the graph shows how the 
+model has captured semantic and grammatical patterns effectively.
+The loss gradually decreased throughout the training process, showing that the model was learning and improving. In the end, 
+the loss stabilized, suggesting that the model successfully captured the semantic and grammatical patterns in the data.

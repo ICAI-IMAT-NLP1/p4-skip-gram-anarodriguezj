@@ -1,6 +1,8 @@
 from typing import List, Tuple, Dict, Generator
 from collections import Counter
 import torch
+import math
+import random
 
 try:
     from src.utils import tokenize
@@ -23,7 +25,7 @@ def load_and_preprocess_data(infile: str) -> List[str]:
 
     # Preprocess and tokenize the text
     # TODO
-    tokens: List[str] = None
+    tokens: List[str] = tokenize(text)
 
     return tokens
 
@@ -39,13 +41,13 @@ def create_lookup_tables(words: List[str]) -> Tuple[Dict[str, int], Dict[int, st
         and the second maps integers to words (int_to_vocab).
     """
     # TODO
-    word_counts: Counter = None
+    word_counts: Counter = Counter(words)
     # Sorting the words from most to least frequent in text occurrence.
-    sorted_vocab: List[int] = None
+    sorted_vocab: List[str] = sorted(word_counts, key=word_counts.get, reverse=True) # reverse=True ordena de mayor a menor
     
     # Create int_to_vocab and vocab_to_int dictionaries.
-    int_to_vocab: Dict[int, str] = None
-    vocab_to_int: Dict[str, int] = None
+    int_to_vocab: Dict[int, str] = {idx: word for idx, word in enumerate(sorted_vocab)}
+    vocab_to_int: Dict[str, int] = {word: idx for idx, word in enumerate(sorted_vocab)}
 
     return vocab_to_int, int_to_vocab
 
@@ -70,17 +72,20 @@ def subsample_words(words: List[str], vocab_to_int: Dict[str, int], threshold: f
         Dict[str, float]: Dictionary associating each word with its frequency.
     """
     # TODO
-    # Convert words to integers
-    int_words: List[int] = None
+    int_words: List[int] = [vocab_to_int[word] for word in words]
     
-    freqs: Dict[str, float] = None
-    train_words: List[str] = None
-
+    count = Counter(int_words)
+    total_words = sum(count.values())
+    freqs: Dict[str, float] =  {word: count[word] for word in count}
+    probs = {word : 1-torch.sqrt(torch.tensor(threshold/(freqs[word]/total_words))) for word in freqs.keys()}
+    train_words: List[int] =[word for word in int_words if 0.5 < probs[word]]
+    
     return train_words, freqs
 
 def get_target(words: List[str], idx: int, window_size: int = 5) -> List[str]:
     """
-    Get a list of words within a window around a specified index in a sentence.
+    Get a list of words within abatch = words[idx : idx + batch_size]  # Tomamos un batch de palabras
+ window around a specified index in a sentence.
 
     Args:
         words (List[str]): The list of words from which context words will be selected.
@@ -91,11 +96,16 @@ def get_target(words: List[str], idx: int, window_size: int = 5) -> List[str]:
         List[str]: A list of words selected randomly within the window around the target word.
     """
     # TODO
-    target_words: List[str] = None
-
+    rand_size = random.randint(1, window_size)
+    
+    start = max(0, idx-rand_size)
+    end = min(len(words), idx+rand_size+1)
+    
+    target_words: List[str] = words[start : idx]+ words[idx+1 : end]
     return target_words
 
-def get_batches(words: List[int], batch_size: int, window_size: int = 5) -> Generator[Tuple[List[int], List[int]]]:
+# def get_batches(words: List[int], batch_size: int, window_size: int = 5) -> Generator[Tuple[List[int], List[int]]]:
+def get_batches(words: List[int], batch_size: int, window_size: int = 5):
     """Generate batches of word pairs for training.
 
     This function creates a generator that yields tuples of (inputs, targets),
@@ -116,8 +126,17 @@ def get_batches(words: List[int], batch_size: int, window_size: int = 5) -> Gene
 
     # TODO
     for idx in range(0, len(words), batch_size):
-        inputs, targets: Tuple[List[int], List[int]] = None, None
-        yield inputs, targets
+        batch = words[idx : idx + batch_size]
+        
+        if len(batch) == batch_size:
+            inputs, targets = [], []
+                
+            for i, word in enumerate(batch):
+                target_words = get_target(batch, i, window_size)
+                for target in target_words:
+                    inputs.append(word)
+                    targets.append(target)
+            yield inputs, targets
 
 def cosine_similarity(embedding: torch.nn.Embedding, valid_size: int = 16, valid_window: int = 100, device: str = 'cpu'):
     """Calculates the cosine similarity of validation words with words in the embedding matrix.
@@ -141,7 +160,14 @@ def cosine_similarity(embedding: torch.nn.Embedding, valid_size: int = 16, valid
     """
 
     # TODO
-    valid_examples: torch.Tensor = None
-    similarities: torch.Tensor = None
+    valid_examples: torch.Tensor = torch.randint(0, valid_window, (valid_size,), device=device)
+    valid_vectors = embedding(valid_examples)
+    
+    embedding_weights = embedding.weight  
+    embedding_norms = embedding_weights/embedding_weights.norm(dim=1, keepdim=True)
+    
+    valid_vectors = valid_vectors / valid_vectors.norm(dim=1, keepdim=True)
+        
+    similarities: torch.Tensor = torch.matmul(valid_vectors, embedding_norms.T)
 
     return valid_examples, similarities
